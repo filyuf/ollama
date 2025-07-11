@@ -34,11 +34,15 @@
     - name: Reload systemd daemon
       command: systemctl daemon-reexec
 
-    - name: Aktifkan dan restart Ollama
+    - name: Pull tinyllama model (sebelum service start)
+      shell: ollama pull tinyllama
+      register: pull_output
+      retries: 3
+      delay: 10
+      until: pull_output.rc == 0
+
+    - name: Aktifkan dan jalankan Ollama
       systemd:
         name: ollama
         enabled: yes
         state: restarted
-
-    - name: Pull tinyllama model
-      shell: ollama pull tinyllama
