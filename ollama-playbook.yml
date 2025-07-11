@@ -1,23 +1,25 @@
----
-- name: Install dan Setup Ollama
-  hosts: all
-  become: true
+- name: Setup dan Jalankan Ollama
+  hosts: ollama
+  become: yes
   tasks:
-
-    - name: Install dependencies
-      package:
-        name:
-          - curl
-          - unzip
-          - wget
-        state: present
 
     - name: Install Ollama
       shell: curl -fsSL https://ollama.com/install.sh | sh
       args:
         executable: /bin/bash
 
-    - name: Buat systemd service agar bisa diakses publik
+    - name: Cek versi Ollama
+      shell: ollama --version
+      register: ollama_version
+      ignore_errors: true
+
+    - name: Buat folder konfigurasi Ollama
+      file:
+        path: /etc/ollama
+        state: directory
+        mode: '0755'
+
+    - name: Tulis ulang file service Ollama agar bisa diakses publik
       copy:
         dest: /etc/systemd/system/ollama.service
         content: |
@@ -31,34 +33,31 @@
           Group=ollama
           Restart=always
           RestartSec=3
+          Environment="PATH=/home/ec2-user/venv/bin:/home/ec2-user/.local/bin:/home/ec2-user/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin"
           Environment="OLLAMA_HOST=0.0.0.0:11434"
           Environment="OLLAMA_ORIGINS=*"
-          Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 
           [Install]
           WantedBy=multi-user.target
-        mode: '0644'
+      notify:
+        - Reload systemd
+        - Restart Ollama
 
-    - name: Reload systemd daemon
-      shell: systemctl daemon-reexec
-
-    - name: Aktifkan dan restart Ollama
+    - name: Enable service agar auto-start saat boot
       systemd:
         name: ollama
         enabled: yes
-        state: restarted
 
-    - name: Tunggu 10 detik agar layanan siap
-      wait_for:
-        port: 11434
-        host: 127.0.0.1
-        delay: 5
-        timeout: 20
-        state: started
-
-    - name: Pull tinyllama model
-      shell: /usr/local/bin/ollama pull tinyllama
+    - name: Pull TinyLLaMA model
+      shell: ollama pull tinyllama
       register: pull_result
-      retries: 3
-      delay: 10
-      until: pull_result.rc == 0
+      ignore_errors: true
+
+  handlers:
+    - name: Reload systemd
+      command: systemctl daemon-reexec
+
+    - name: Restart Ollama
+      systemd:
+        name: ollama
+        state: restarted
