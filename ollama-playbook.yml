@@ -1,25 +1,14 @@
 - name: Setup dan Jalankan Ollama
-  hosts: ollama
+  hosts: localhost
   become: yes
+  connection: local
   tasks:
-
     - name: Install Ollama
       shell: curl -fsSL https://ollama.com/install.sh | sh
       args:
         executable: /bin/bash
 
-    - name: Cek versi Ollama
-      shell: ollama --version
-      register: ollama_version
-      ignore_errors: true
-
-    - name: Buat folder konfigurasi Ollama
-      file:
-        path: /etc/ollama
-        state: directory
-        mode: '0755'
-
-    - name: Tulis ulang service file agar bisa diakses publik
+    - name: Buat file service Ollama agar bisa diakses publik
       copy:
         dest: /etc/systemd/system/ollama.service
         content: |
@@ -29,8 +18,8 @@
 
           [Service]
           ExecStart=/usr/local/bin/ollama serve
-          User=ollama
-          Group=ollama
+          User=root
+          Group=root
           Restart=always
           RestartSec=3
           Environment="OLLAMA_HOST=0.0.0.0:11434"
@@ -43,30 +32,20 @@
         - Reload systemd
         - Restart Ollama
 
-    - name: Enable service agar auto-start saat boot
+    - name: Reload systemd
+      command: systemctl daemon-reexec
+
+    - name: Restart ulang Ollama service
       systemd:
         name: ollama
-        enabled: yes
+        state: restarted
 
-    - name: Tunggu Ollama siap di port 11434
-      wait_for:
-        port: 11434
-        host: 127.0.0.1
-        delay: 3
-        timeout: 30
-        state: started
-
-    - name: Pull TinyLLaMA model
-      shell: ollama pull tinyllama
-      register: pull_result
-      retries: 3
-      delay: 10
-      until: pull_result.rc == 0
-      ignore_errors: false
+    - name: Pull TinyLLaMA
+      shell: ollama pull tinyllama || true
 
   handlers:
     - name: Reload systemd
-      command: systemctl daemon-reload
+      command: systemctl daemon-reexec
 
     - name: Restart Ollama
       systemd:
