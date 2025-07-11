@@ -19,7 +19,7 @@
         state: directory
         mode: '0755'
 
-    - name: Tulis ulang file service Ollama agar bisa diakses publik
+    - name: Tulis ulang service file agar bisa diakses publik
       copy:
         dest: /etc/systemd/system/ollama.service
         content: |
@@ -28,11 +28,13 @@
           After=network-online.target
 
           [Service]
-          ExecStart=/usr/local/bin/ollama serve --host 0.0.0.0:11434
+          ExecStart=/usr/local/bin/ollama serve
           User=ollama
           Group=ollama
           Restart=always
           RestartSec=3
+          Environment="OLLAMA_HOST=0.0.0.0:11434"
+          Environment="OLLAMA_ORIGINS=*"
           Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 
           [Install]
@@ -46,14 +48,25 @@
         name: ollama
         enabled: yes
 
+    - name: Tunggu Ollama siap di port 11434
+      wait_for:
+        port: 11434
+        host: 127.0.0.1
+        delay: 3
+        timeout: 30
+        state: started
+
     - name: Pull TinyLLaMA model
       shell: ollama pull tinyllama
       register: pull_result
-      ignore_errors: true
+      retries: 3
+      delay: 10
+      until: pull_result.rc == 0
+      ignore_errors: false
 
   handlers:
     - name: Reload systemd
-      command: systemctl daemon-reexec
+      command: systemctl daemon-reload
 
     - name: Restart Ollama
       systemd:
