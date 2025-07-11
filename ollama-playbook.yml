@@ -4,11 +4,12 @@
   become: true
   tasks:
 
-    - name: Install dependencies (curl & systemd)
+    - name: Install dependencies
       package:
         name:
           - curl
-          - systemd
+          - unzip
+          - wget
         state: present
 
     - name: Install Ollama
@@ -16,7 +17,7 @@
       args:
         executable: /bin/bash
 
-    - name: Buat service agar bisa diakses publik
+    - name: Buat systemd service agar bisa diakses publik
       copy:
         dest: /etc/systemd/system/ollama.service
         content: |
@@ -39,13 +40,25 @@
         mode: '0644'
 
     - name: Reload systemd daemon
-      command: systemctl daemon-reexec
+      shell: systemctl daemon-reexec
 
-    - name: Aktifkan dan restart layanan Ollama
+    - name: Aktifkan dan restart Ollama
       systemd:
         name: ollama
         enabled: yes
         state: restarted
 
-    - name: Pull model tinyllama
-      shell: ollama pull tinyllama
+    - name: Tunggu 10 detik agar layanan siap
+      wait_for:
+        port: 11434
+        host: 127.0.0.1
+        delay: 5
+        timeout: 20
+        state: started
+
+    - name: Pull tinyllama model
+      shell: /usr/local/bin/ollama pull tinyllama
+      register: pull_result
+      retries: 3
+      delay: 10
+      until: pull_result.rc == 0
